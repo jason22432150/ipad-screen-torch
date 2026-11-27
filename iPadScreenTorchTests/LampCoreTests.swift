@@ -187,3 +187,45 @@ extension LampCoreTests {
         XCTAssertEqual(try Data(contentsOf: url.appendingPathExtension("invalid")), Data("broken".utf8))
     }
 }
+
+extension LampCoreTests {
+    func testBrightnessTransitionTimingAndSafetyArbitration() {
+        let on = BrightnessTransition(from: 0, to: 100, start: 10)
+        let off = BrightnessTransition(from: 100, to: 0, start: 10)
+        XCTAssertEqual(on.sample(now: 10).effective, 0)
+        XCTAssertEqual(on.sample(now: 10.25).effective, 50)
+        XCTAssertEqual(off.sample(now: 10.25).effective, 50)
+        XCTAssertTrue(off.sample(now: 10.5).complete)
+        XCTAssertEqual(off.sample(now: 10.5).effective, 0)
+        XCTAssertEqual(on.sample(now: .nan).effective, 0)
+        var s = LampState()
+        LampReducer.reduce(&s, .activate(.nominal, ac, 10))
+        LampReducer.reduce(&s, .toggle)
+        XCTAssertEqual(s.outputEffective(transition: 100), 80)
+        LampReducer.reduce(&s, .readings(.serious, ac, 10.1))
+        XCTAssertEqual(s.outputEffective(transition: 100), 40)
+        LampReducer.reduce(&s, .emergencyStop)
+        XCTAssertEqual(s.outputEffective(transition: 100), 0)
+        LampReducer.reduce(&s, .deactivate)
+        XCTAssertEqual(s.outputEffective(transition: 100), 0)
+    }
+    func testFadeOutputUsesHardwareMappingAndImmediateStop() async {
+        await MainActor.run {
+            let screen = FakeScreen(), idle = FakeIdleTimer()
+            let owner = ScreenOwnership(screen: screen, idle: idle)
+            var s = LampState()
+            owner.acquire()
+            LampReducer.reduce(&s, .activate(.nominal, BatteryReading(level: 0.9, power: .charging), 0))
+            LampReducer.reduce(&s, .toggle)
+            owner.apply(s, now: 0.25, transitionEffective: 40)
+            XCTAssertEqual(screen.brightness, 0.4)
+            LampReducer.reduce(&s, .toggle)
+            owner.apply(s, now: 0.4, transitionEffective: 3)
+            XCTAssertEqual(screen.brightness, 0.05)
+            LampReducer.reduce(&s, .emergencyStop)
+            owner.apply(s, now: 0.41, transitionEffective: 80)
+            XCTAssertEqual(screen.brightness, 0)
+            XCTAssertFalse(idle.disabled)
+        }
+    }
+}

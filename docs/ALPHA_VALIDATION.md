@@ -23,4 +23,4 @@ Portable Swift checks are not iOS acceptance. Record exact commit, build number,
 5. Use a personal signing workflow from INSTALLATION.md; install on backed-up iPad Air 2. Verify in flight mode and normal operating temperatures. Never upload signing secrets or device UDID.
 
 ## Remaining engineering checks
-Physical hybrid 500 ms transition, native UI layout, real brightness notifications, safety and lifecycle behavior, and actual IPA inspection must be completed before release. A failed/unrun check is not a PASS. Do not tag or publish v0.1.0 while gates remain open.
+Physical hybrid 500 ms transition timing, native UI layout, real brightness notifications, safety and lifecycle behavior, and actual IPA inspection must be validated before release. Portable transition logic and mock emergency-stop tests PASS (13/13 full core suite in Debug and Release). A failed/unrun check is not a PASS. Do not tag or publish v0.1.0 while gates remain open.

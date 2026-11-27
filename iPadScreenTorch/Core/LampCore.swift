@@ -118,6 +118,11 @@ struct LampState {
         guard active, wantsLight, !isBlocked else { return 0 }
         return min(requested, safety.thermalCap, safety.battery.cap)
     }
+    func outputEffective(transition: Int?) -> Int {
+        guard active, !isBlocked else { return 0 }
+        guard let transition = transition else { return effective }
+        return min(max(0, transition), requested, safety.thermalCap, safety.battery.cap)
+    }
     var phase: LampPhase {
         if !launched { return .initializing }
         if !active { return .suspended }
@@ -260,9 +265,9 @@ struct LampRGB: Equatable {
         idle.disabled = original.idle
         if original.brightness.isFinite { screen.write(min(1, max(0, original.brightness))) }
     }
-    func apply(_ state: LampState, now: TimeInterval, allowBrightnessWrite: Bool = true) {
+    func apply(_ state: LampState, now: TimeInterval, allowBrightnessWrite: Bool = true, transitionEffective: Int? = nil) {
         guard state.active, let original = snapshot else { return }
-        let output = BrightnessOutput.map(state.effective)
+        let output = BrightnessOutput.map(state.outputEffective(transition: transitionEffective))
         idle.disabled = state.phase == .lighting || state.phase == .standby ? true : original.idle
         if allowBrightnessWrite && (!screen.brightness.isFinite || abs(screen.brightness - output.hardware) > 0.0005) {
             lastWrite = (output.hardware, now)
@@ -342,5 +347,18 @@ final class RuntimePersistence {
             let data = try JSONEncoder().encode(snapshot)
             try data.write(to: url, options: .atomic)
         }
+    }
+}
+
+struct BrightnessTransition {
+    let from: Int
+    let to: Int
+    let start: TimeInterval
+    func sample(now: TimeInterval) -> (effective: Int, complete: Bool) {
+        guard now.isFinite, start.isFinite, now >= start else { return (0, true) }
+        let a = Double(min(100, max(0, from)))
+        let b = Double(min(100, max(0, to)))
+        let progress = min(1, (now - start) / 0.5)
+        return (Int((a + (b - a) * progress).rounded()), progress >= 1)
     }
 }

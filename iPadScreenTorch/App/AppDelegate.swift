@@ -83,6 +83,10 @@ import SwiftUI
     private var initialKelvin = 4000
     private var panAxis: Int?
     private var lastPanUpdate: TimeInterval = 0
+    private var transition: BrightnessTransition?
+    private var transitionTimer: Timer?
+    private var transitionGeneration = 0
+    private var renderedEffective = 0
     private var lastRendered: (effective: Int, kelvin: Int, heat: Heat, thermalCap: Int, batteryCap: Int)?
     private var lastExternalCorrection: TimeInterval = -.infinity
     private var correctingBrightness = false
@@ -212,6 +216,8 @@ import SwiftUI
         observers.forEach { NotificationCenter.default.removeObserver($0) }
         observers.removeAll()
         store.send(.deactivate)
+        cancelTransition()
+        renderedEffective = 0
         surface.layer.removeAllAnimations()
         surface.backgroundColor = .black
         lastRendered = nil
@@ -298,7 +304,7 @@ import SwiftUI
         guard let value = ownership.externalBrightness(hardware.brightness, now: now) else { return }
         store.send(.readings(hardware.heat, hardware.reading, now))
         let state = store.state
-        let target = BrightnessOutput.map(state.effective).hardware
+        let target = BrightnessOutput.map(state.outputEffective(transition: transition == nil ? nil : renderedEffective)).hardware
         if abs(hardware.brightness - target) <= 0.0005 { render(); persistChanged(); return }
         if state.isBlocked || hardware.brightness > target + 0.001 && state.effective < state.requested {
             // Do not fight an uncooperative system indefinitely.
@@ -320,28 +326,68 @@ import SwiftUI
         persistChanged()
     }
 
+    private func cancelTransition() {
+        transitionGeneration += 1
+        transitionTimer?.invalidate()
+        transitionTimer = nil
+        transition = nil
+    }
+
+    private func scheduleTransitionFrame() {
+        guard transitionTimer == nil else { return }
+        let generation = transitionGeneration
+        let session = sessionGeneration
+        transitionTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                guard let self = self, self.transitionGeneration == generation, self.sessionGeneration == session, self.store.state.active else { return }
+                self.transitionTimer = nil
+                // Each hardware frame re-samples safety. No animation bypasses reducer or cap.
+                self.refresh()
+            }
+        }
+    }
+
     private func render() {
         let state = store.state
         guard state.active else { return }
-        let output = BrightnessOutput.map(state.effective)
-        let color = LampRGB.kelvin(state.kelvin).scaled(output.software)
-        let target = UIColor(red: CGFloat(color.red), green: CGFloat(color.green), blue: CGFloat(color.blue), alpha: 1)
+        let now = hardware.monotonic
         let previous = lastRendered
         let safetyDrop = state.isBlocked || state.safety.heat == .serious || state.safety.heat == .critical ||
             (previous.map { state.safety.thermalCap < $0.thermalCap || state.safety.battery.cap < $0.batteryCap } ?? true)
-        let changed = previous?.effective != state.effective || previous?.kelvin != state.kelvin
-        if safetyDrop || UIAccessibility.isReduceMotionEnabled {
+        let immediate = safetyDrop || UIAccessibility.isReduceMotionEnabled
+        let colorChanged = previous?.kelvin != state.kelvin
+        if immediate {
+            cancelTransition()
             surface.layer.removeAllAnimations()
-            surface.backgroundColor = target
-        } else if changed {
-            let toggled = (previous?.effective == 0) != (state.effective == 0)
-            UIView.animate(withDuration: toggled ? 0.5 : 0.2, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
-                self.surface.backgroundColor = target
+        } else if let previous = previous, previous.effective != state.effective {
+            cancelTransition()
+            if (previous.effective == 0) != (state.effective == 0) {
+                transition = BrightnessTransition(from: renderedEffective, to: state.effective, start: now)
+                surface.layer.removeAllAnimations()
             }
         }
+        var frame: Int? = nil
+        if let transition = transition {
+            let sample = transition.sample(now: now)
+            frame = sample.effective
+            if sample.complete { cancelTransition() }
+            else { scheduleTransitionFrame() }
+        }
+        let effective = state.outputEffective(transition: frame)
+        let output = BrightnessOutput.map(effective)
+        let color = LampRGB.kelvin(state.kelvin).scaled(output.software)
+        let target = UIColor(red: CGFloat(color.red), green: CGFloat(color.green), blue: CGFloat(color.blue), alpha: 1)
+        if !immediate && frame == nil && colorChanged {
+            UIView.animate(withDuration: 0.2, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
+                self.surface.backgroundColor = target
+            }
+        } else if immediate || frame != nil || renderedEffective != effective || colorChanged {
+            surface.backgroundColor = target
+        }
         correctingBrightness = true
-        ownership.apply(state, now: hardware.monotonic, allowBrightnessWrite: !suppressBrightnessWrites)
+        ownership.apply(state, now: now, allowBrightnessWrite: !suppressBrightnessWrites, transitionEffective: frame)
         correctingBrightness = false
+        renderedEffective = effective
         lastRendered = (state.effective, state.kelvin, state.safety.heat, state.safety.thermalCap, state.safety.battery.cap)
         if state.isBlocked {
             panel?.view.isHidden = false
