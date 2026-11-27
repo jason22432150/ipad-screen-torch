@@ -74,6 +74,7 @@ import SwiftUI
     private let store = LampStore()
     private let surface = UIView()
     private var panel: UIHostingController<QuickPanel>?
+    private var panelHeight: NSLayoutConstraint?
     private var observers: [NSObjectProtocol] = []
     private var hideTimer: Timer?
     private var recoveryTimer: Timer?
@@ -142,7 +143,8 @@ import SwiftUI
                               settingsChanged: { [weak self] in self?.setSettings($0) },
                               close: { [weak self] in self?.setPanel(false) },
                               canConfirm: { [weak self] in self?.canConfirm ?? false },
-                              changeLanguage: { [weak self] in self?.changeLanguage() })
+                              changeLanguage: { [weak self] in self?.changeLanguage() },
+                              contentHeightChanged: { [weak self] height in self?.updatePanelHeight(height) })
         let host = UIHostingController(rootView: root)
         addChild(host)
         host.view.backgroundColor = .clear
@@ -150,16 +152,30 @@ import SwiftUI
         view.addSubview(host.view)
         let preferredWidth = host.view.widthAnchor.constraint(equalToConstant: 420)
         preferredWidth.priority = .defaultHigh
+        // iOS 15 hosting views do not automatically track all SwiftUI content-size changes.
+        // Keep a measured height, with the required safe-area bottom constraint as a ceiling.
+        let preferredHeight = host.view.heightAnchor.constraint(equalToConstant: 420)
+        preferredHeight.priority = UILayoutPriority(999)
+        panelHeight = preferredHeight
+        host.view.setContentHuggingPriority(.defaultLow, for: .vertical)
+        host.view.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
         NSLayoutConstraint.activate([
             host.view.centerXAnchor.constraint(equalTo: view.safeAreaLayoutGuide.centerXAnchor),
             host.view.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
             host.view.leadingAnchor.constraint(greaterThanOrEqualTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 12),
             host.view.trailingAnchor.constraint(lessThanOrEqualTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -12),
             host.view.bottomAnchor.constraint(lessThanOrEqualTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -12),
-            preferredWidth
+            preferredWidth, preferredHeight
         ])
         host.didMove(toParent: self)
         panel = host
+    }
+
+    private func updatePanelHeight(_ height: CGFloat) {
+        guard height.isFinite, height > 0, let constraint = panelHeight else { return }
+        let measured = ceil(height)
+        guard abs(constraint.constant - measured) >= 1 else { return }
+        constraint.constant = measured
     }
 
     func activate() {
@@ -482,6 +498,11 @@ private func tr(_ zh: String, _ en: String) -> String {
     UserDefaults.standard.string(forKey: "uiLanguage") == "en" ? en : zh
 }
 
+private struct PanelHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
 @MainActor struct QuickPanel: View {
     @ObservedObject var store: LampStore
     var send: (LampAction) -> Void
@@ -490,17 +511,24 @@ private func tr(_ zh: String, _ en: String) -> String {
     var close: () -> Void
     var canConfirm: () -> Bool
     var changeLanguage: () -> Void
+    var contentHeightChanged: (CGFloat) -> Void
     var languageRevision = 0
     var settingsRequested = false
     var notice: String? = nil
 
     var body: some View {
         let state = store.state
+        ScrollView {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Screen Torch").font(.headline)
                 Spacer()
-                Button(tr("隱藏", "Hide"), action: close).accessibilityIdentifier("hidePanel")
+                if settingsRequested {
+                    Button(tr("返回", "Back")) { settingsChanged(false) }
+                        .accessibilityIdentifier("backSettings")
+                } else {
+                    Button(tr("隱藏", "Hide"), action: close).accessibilityIdentifier("hidePanel")
+                }
             }
             if let notice = notice { Text(notice).font(.footnote) }
             if state.storageBlocked {
@@ -544,10 +572,19 @@ private func tr(_ zh: String, _ en: String) -> String {
                 Text(tr("電量上限", "Battery cap") + ": \(state.safety.battery.cap)%")
                 Text(tr("上下滑動亮度，左右滑動色溫；雙擊開關。老舊電池須先檢查，異常發熱立即停用。", "Swipe vertically for brightness, horizontally for color; double tap to toggle. Inspect old batteries; stop if unusually hot.")).font(.footnote)
                 Button(tr("English", "繁體中文"), action: changeLanguage)
-                Button(tr("返回", "Back")) { settingsChanged(false) }.accessibilityIdentifier("backSettings")
             }
         }
         .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
+        .background(GeometryReader { geometry in
+            Color.clear.preference(key: PanelHeightKey.self, value: geometry.size.height)
+        })
+        }
+        .onPreferenceChange(PanelHeightKey.self) { height in
+            contentHeightChanged(height)
+        }
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 }

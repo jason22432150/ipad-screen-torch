@@ -16,3 +16,8 @@
 - Run 45945349489: Xcode environment, Debug/Release device builds and simulator selection PASS.
 - Debug native XCTest: 13/13 PASS. XCUITest: 3/4 PASS; emergency persistence test failed to tap emergencyStop after the quick panel auto-hid (accessibility hierarchy contained lampSurface only). Release tests and IPA skipped, not PASS.
 - Revised XCUITest to enter settings through the existing long-press gesture before interacting, preserving the production 5-second hide timer. Explicitly closes settings before testing auto-hide. Retry pending.
+
+## Native CI #2 — 217da3e
+- Run 45950420650: Debug and Release device builds PASS; native Debug core XCTest 13/13 PASS.
+- XCUITest 3/4 PASS. Emergency latch across relaunch now PASS. Auto-hide test failed at backSettings: element found, but AX could not compute a hit point (scroll-to-visible failed). Release tests and IPA skipped.
+- Corrective UI changes: explicit measured hosting height constrained to safe area, scrollable content, return action moved to header so it remains reachable; no deployment-target or hide-time changes. XCUITest now asserts that Back is hittable and actually closes settings. Native regression pending.

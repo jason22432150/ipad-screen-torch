@@ -20,6 +20,7 @@ final class LampUITests: XCTestCase {
             surfacePoint(app).press(forDuration: 1.0)
         }
         XCTAssertTrue(back.waitForExistence(timeout: 5))
+        XCTAssertTrue(back.isHittable, "Settings back control must be reachable")
     }
 
     func testLaunchAndControls() {
@@ -52,6 +53,7 @@ final class LampUITests: XCTestCase {
         XCTAssertTrue(toggle.waitForExistence(timeout: 3))
         let initial = toggle.label
         app.buttons["backSettings"].tap()
+        XCTAssertFalse(app.buttons["backSettings"].exists, "Returning to quick controls must close settings")
         let hidden = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: toggle)
         XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 8), .completed)
         let point = surfacePoint(app)
