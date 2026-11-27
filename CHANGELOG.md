@@ -2,7 +2,7 @@
 
 ## Unreleased — v0.1.0 Alpha implementation
 - 建立 iOS 15 Xcode target、核心安全與混合亮度/色溫、原生 UI、最小 runtime 保存及本機 IPA 工具。
-- 可攜式 Swift 核心 Debug/Release XCTest 各 13/13 PASS；CI #3 原生 Debug/Release 各 13/13 XCTest、4/4 XCUITest PASS；未簽署 IPA arm64/minOS 15.0 檢查 PASS。追加手勢/方向測試尚待 CI；實機及正式放行仍未完成。
+- 可攜式 Swift 核心 Debug/Release XCTest 各 13/13 PASS；CI #4 原生 Debug/Release 各 13/13 XCTest、6/6 XCUITest PASS（含兩軸手勢、四方向）；未簽署 IPA arm64/minOS 15.0 檢查 PASS。實機及正式放行仍未完成。
 
 ## Unreleased — 規格 v1.0（2026-11-27）
 - 完成 13 項產品與技術決策；個人專用安裝 B、完整測試 B。

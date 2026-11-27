@@ -12,13 +12,15 @@
 | v1.0.0 | 穩定個人 IPA、安裝/使用說明 | 必測全通過，無未解安全缺陷 |
 
 ## 第一批實作工作（依序）
-- [ ] M01 Xcode iPad project、scheme、最低 iOS15、Swift5，零依賴；本機檢查/build/test 腳本。
-- [ ] M02 Core models、protocols、Store/reducer、fake clock/battery/thermal/screen；安全 cap 與 latch。
-- [ ] M03 brightness + color 純函式與 XCTest；硬體 ownership、idle timer、生命週期恢復。
-- [ ] M04 UIKit surface + SwiftUI overlay，四方向、手勢、5秒 hide、mode/color controls 基礎。
-- [ ] M05 保存最小有效資料、啟動安全待機、基本異常保護。
-- [ ] M06 Debug/Release、XCTest/XCUITest、IPA package/verify、iPad Air 2 實機安裝及安全基礎驗收。
-- [ ] M07 v0.1.0 release candidate evidence；確認問題再進 v0.2.0。
+
+勾選表示 Alpha 程式碼及當前自動化測試完成，不表示 iPad Air 2 實機驗收通過。[CI #4](https://github.com/jason22432150/ipad-screen-torch/actions/runs/45956631549)：Debug/Release 各 19/19；[實機驗收紀錄](ALPHA_VALIDATION.md) 仍待執行。
+- [x] M01 Xcode iPad project、scheme、最低 iOS15、Swift5，零依賴；本機檢查/build/test 腳本。
+- [x] M02 Core models、protocols、Store/reducer、fake clock/battery/thermal/screen；安全 cap 與 latch。
+- [x] M03 brightness + color 純函式與 XCTest；硬體 ownership、idle timer、生命週期恢復。
+- [x] M04 UIKit surface + SwiftUI overlay，四方向、手勢、5秒 hide、mode/color controls 基礎。
+- [x] M05 保存最小有效資料、啟動安全待機、基本異常保護。
+- [ ] M06 Debug/Release、XCTest/XCUITest、IPA package/verify、iPad Air 2 實機安裝及安全基礎驗收。（CI/IPA 已通過；實機 BLOCKED）
+- [ ] M07 v0.1.0 release candidate evidence；確認問題再進 v0.2.0。（未放行）
 
 之後按版本建立小型 issue/commit；每項定義驗收測試、變更與回歸證據。完整診斷/安全恢復於 v0.4.0 補齊，核心保護不可延後。未經使用者確認不自動啟用付費 CI、不實作 App Store/遠端服務。規格變更需更新相應 docs 與 CHANGELOG。
 
