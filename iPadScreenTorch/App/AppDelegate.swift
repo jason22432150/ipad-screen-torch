@@ -137,7 +137,8 @@ import SwiftUI
                               editing: { [weak self] in self?.setEditing($0) },
                               settingsChanged: { [weak self] in self?.setSettings($0) },
                               close: { [weak self] in self?.setPanel(false) },
-                              canConfirm: { [weak self] in self?.canConfirm ?? false })
+                              canConfirm: { [weak self] in self?.canConfirm ?? false },
+                              changeLanguage: { [weak self] in self?.changeLanguage() })
         let host = UIHostingController(rootView: root)
         addChild(host)
         host.view.backgroundColor = .clear
@@ -163,7 +164,12 @@ import SwiftUI
         sessionGeneration += 1
         if !loadedRuntime {
             loadedRuntime = true
-            if let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            if var root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+                #if targetEnvironment(simulator)
+                if let id = ProcessInfo.processInfo.environment["SCREEN_TORCH_UI_TEST_ID"], UUID(uuidString: id) != nil {
+                    root = root.appendingPathComponent("UITestRuntime").appendingPathComponent(id)
+                }
+                #endif
                 let persistence = RuntimePersistence(url: root.appendingPathComponent("config/runtime-state.json"))
                 self.persistence = persistence
                 switch persistence.load() {
@@ -217,6 +223,7 @@ import SwiftUI
     private func persistNow(active: Bool) {
         persistTimer?.invalidate(); persistTimer = nil
         persistGeneration += 1
+        if active && store.state.storageBlocked { return }
         let snapshot = RuntimeSnapshot(state: store.state, active: active)
         if snapshot == lastSaved { return }
         do {
@@ -231,6 +238,7 @@ import SwiftUI
     }
 
     private func persistChanged() {
+        guard !store.state.storageBlocked else { return }
         let snapshot = RuntimeSnapshot(state: store.state, active: true)
         guard snapshot != lastSaved else { return }
         if snapshot.safetyLatch != lastSaved?.safetyLatch || snapshot.desiredPower != lastSaved?.desiredPower {
@@ -269,7 +277,7 @@ import SwiftUI
     }
 
     private var canConfirm: Bool {
-        !store.state.storageBlocked && store.state.safety.canConfirm(now: hardware.monotonic)
+        !suppressBrightnessWrites && !store.state.storageBlocked && store.state.safety.canConfirm(now: hardware.monotonic)
     }
 
     private func dispatch(_ action: LampAction) {
@@ -277,7 +285,7 @@ import SwiftUI
         // Re-read before a user action; no UI action writes hardware directly.
         let now = hardware.monotonic
         store.send(.readings(hardware.heat, hardware.reading, now))
-        if case .confirmSafety = action { store.send(.confirmSafety(now)) }
+        if case .confirmSafety = action { if canConfirm { store.send(.confirmSafety(now)) } }
         else { store.send(action) }
         render()
         persistChanged()
@@ -291,10 +299,12 @@ import SwiftUI
         store.send(.readings(hardware.heat, hardware.reading, now))
         let state = store.state
         let target = BrightnessOutput.map(state.effective).hardware
+        if abs(hardware.brightness - target) <= 0.0005 { render(); persistChanged(); return }
         if state.isBlocked || hardware.brightness > target + 0.001 && state.effective < state.requested {
             // Do not fight an uncooperative system indefinitely.
             if now - lastExternalCorrection < 0.5 {
                 suppressBrightnessWrites = true
+                panel?.rootView.notice = tr("系統亮度設定未能確認，已停止照明。請離開 App 再返回後手動確認。", "System brightness could not be confirmed. Leave and return to the app before confirming the stop.")
                 store.send(.emergencyStop)
                 surface.layer.removeAllAnimations()
                 surface.backgroundColor = .black
@@ -343,7 +353,7 @@ import SwiftUI
     private func scheduleRecovery() {
         let safety = store.state.safety
         let waiting = safety.thermalCap < safety.heat.cap ||
-            (safety.latch.contains(.criticalHeat) && safety.heat == .nominal && !canConfirm)
+            (safety.latch.contains(.criticalHeat) && safety.heat == .nominal && !safety.canConfirm(now: hardware.monotonic))
         guard waiting else { recoveryTimer?.invalidate(); recoveryTimer = nil; return }
         guard recoveryTimer == nil else { return }
         let generation = sessionGeneration
@@ -373,6 +383,16 @@ import SwiftUI
         }
     }
     private func setEditing(_ value: Bool) { panelEditing = value; if !value { persistNow(active: store.state.active) }; scheduleHide() }
+    private func changeLanguage() {
+        let current = UserDefaults.standard.string(forKey: "uiLanguage") ?? "zh-Hant"
+        UserDefaults.standard.set(current == "en" ? "zh-Hant" : "en", forKey: "uiLanguage")
+        surface.accessibilityLabel = tr("燈光畫面", "Lamp surface")
+        surface.accessibilityCustomActions = [
+            UIAccessibilityCustomAction(name: tr("顯示控制面板", "Show controls"), target: self, selector: #selector(accessibilityShowPanel)),
+            UIAccessibilityCustomAction(name: tr("開關燈", "Toggle lamp"), target: self, selector: #selector(accessibilityToggle))
+        ]
+        if var root = panel?.rootView { root.languageRevision += 1; panel?.rootView = root }
+    }
     private func setSettings(_ value: Bool) { panelSettings = value; panel?.rootView.settingsRequested = value; scheduleHide() }
 
     @objc private func singleTap() { setPanel(panel?.view.isHidden == true) }
@@ -413,7 +433,7 @@ import SwiftUI
 }
 
 private func tr(_ zh: String, _ en: String) -> String {
-    Locale.preferredLanguages.first?.hasPrefix("en") == true ? en : zh
+    UserDefaults.standard.string(forKey: "uiLanguage") == "en" ? en : zh
 }
 
 @MainActor struct QuickPanel: View {
@@ -423,6 +443,8 @@ private func tr(_ zh: String, _ en: String) -> String {
     var settingsChanged: (Bool) -> Void
     var close: () -> Void
     var canConfirm: () -> Bool
+    var changeLanguage: () -> Void
+    var languageRevision = 0
     var settingsRequested = false
     var notice: String? = nil
 
@@ -466,7 +488,7 @@ private func tr(_ zh: String, _ en: String) -> String {
                 .accessibilityLabel(Text(tr("色溫", "Color temperature"))).accessibilityIdentifier("kelvinSlider")
                 .disabled(state.isBlocked)
             HStack {
-                Button(tr("設定 / 安全", "Settings / Safety")) { settingsChanged(!settingsRequested) }
+                Button(tr("設定 / 安全", "Settings / Safety")) { settingsChanged(!settingsRequested) }.accessibilityIdentifier("settingsButton")
                 Spacer()
                 Button(tr("緊急關燈", "Emergency stop"), role: .destructive) { send(.emergencyStop) }
                     .accessibilityIdentifier("emergencyStop")
@@ -475,7 +497,8 @@ private func tr(_ zh: String, _ en: String) -> String {
                 Text(tr("熱狀態", "Thermal") + ": \(state.safety.heat.rawValue) · \(state.safety.thermalCap)%")
                 Text(tr("電量上限", "Battery cap") + ": \(state.safety.battery.cap)%")
                 Text(tr("上下滑動亮度，左右滑動色溫；雙擊開關。老舊電池須先檢查，異常發熱立即停用。", "Swipe vertically for brightness, horizontally for color; double tap to toggle. Inspect old batteries; stop if unusually hot.")).font(.footnote)
-                Button(tr("返回", "Back")) { settingsChanged(false) }
+                Button(tr("English", "繁體中文"), action: changeLanguage)
+                Button(tr("返回", "Back")) { settingsChanged(false) }.accessibilityIdentifier("backSettings")
             }
         }
         .padding(16)
