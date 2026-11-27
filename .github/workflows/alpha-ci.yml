@@ -1,0 +1,110 @@
+name: iPadOS Alpha CI
+on:
+  push:
+    branches: ['develop/v0.1.0-alpha']
+    paths:
+      - 'iPadScreenTorch/**'
+      - 'iPadScreenTorch.xcodeproj/**'
+      - 'iPadScreenTorchTests/**'
+      - 'iPadScreenTorchUITests/**'
+      - 'scripts/**'
+      - 'Package.swift'
+      - '.github/workflows/alpha-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: alpha-ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  native:
+    name: Native build, XCTest, XCUITest and unsigned IPA
+    runs-on: macos-15
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Toolchain and script validation
+        run: |
+          mkdir -p build/ci
+          for script in scripts/*.sh; do bash -n "$script"; done
+          scripts/check-env.sh | tee build/ci/environment.log
+          xcodebuild -list -project iPadScreenTorch.xcodeproj
+      - name: Debug device build (no signing)
+        run: scripts/build.sh Debug | tee build/ci/debug-build.log
+      - name: Release device build (no signing)
+        run: scripts/build.sh Release | tee build/ci/release-build.log
+      - name: Select available iPad simulator
+        id: sim
+        run: |
+          xcrun simctl list devices available -j > build/ci/simulators.json
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, re
+          with open("build/ci/simulators.json") as f:
+              runtimes = json.load(f)["devices"]
+          candidates = []
+          for runtime, devices in runtimes.items():
+              match = re.search(r'iOS-(\d+(?:-\d+)*)$', runtime)
+              if not match:
+                  continue
+              version = tuple(map(int, match.group(1).split('-')))
+              for device in devices:
+                  if device.get("isAvailable") and device["name"].startswith("iPad"):
+                      candidates.append((version, device["name"], device["udid"]))
+          if not candidates:
+              raise SystemExit("No available iPad simulator; native UI gate cannot pass")
+          version, name, udid = max(candidates)
+          print("udid=" + udid)
+          print("runtime=" + ".".join(map(str, version)))
+          print("name=" + name)
+          PY
+          cat "$GITHUB_OUTPUT"
+      - name: Debug XCTest and XCUITest
+        env:
+          SIM_ID: ${{ steps.sim.outputs.udid }}
+        run: scripts/test.sh "$SIM_ID" Debug | tee build/ci/debug-test.log
+      - name: Release XCTest and XCUITest
+        env:
+          SIM_ID: ${{ steps.sim.outputs.udid }}
+        run: scripts/test.sh "$SIM_ID" Release | tee build/ci/release-test.log
+      - name: Package and verify unsigned IPA
+        run: |
+          mkdir -p build/ci/ipa
+          scripts/package-ipa.sh build/device-Release/Build/Products/Release-iphoneos/iPadScreenTorch.app build/ci/ipa/iPadScreenTorch-0.1.0-unsigned.ipa
+          scripts/verify-ipa.sh build/ci/ipa/iPadScreenTorch-0.1.0-unsigned.ipa | tee build/ci/ipa/verify-ipa.txt
+          (cd build/ci/ipa && shasum -a 256 *.ipa > SHA256SUMS.txt)
+          python3 - <<'PY'
+          import json, os, pathlib, subprocess
+          info = {
+              "commit": os.environ["GITHUB_SHA"],
+              "xcode": subprocess.check_output(["xcodebuild", "-version"], text=True).strip(),
+              "sdk": subprocess.check_output(["xcrun", "--sdk", "iphoneos", "--show-sdk-version"], text=True).strip(),
+              "minimumOS": "15.0", "version": "0.1.0", "build": "1",
+              "deviceTest": "NOT RUN", "releaseGate": "NOT PASSED"
+          }
+          log = pathlib.Path("build/ci/ipa/verify-ipa.txt").read_text()
+          info["signing"] = next(line.split("=", 1)[1] for line in log.splitlines() if line.startswith("SIGNING="))
+          pathlib.Path("build/ci/ipa/build-info.json").write_text(json.dumps(info, indent=2) + "\n")
+          PY
+      - name: Upload CI logs and test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alpha-ci-evidence
+          path: |
+            build/ci/*.log
+            build/ci/simulators.json
+            build/simulator-*/Logs/Test/*.xcresult
+          retention-days: 7
+          if-no-files-found: warn
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipad-screen-torch-alpha-unsigned
+          path: build/ci/ipa/
+          retention-days: 7
+          if-no-files-found: error
