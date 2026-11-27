@@ -11,3 +11,8 @@
 - Do not deploy as a lamp before native and safety acceptance.
 
 - Final portable regression: Linux Swift 6.2.1 Swift 5 mode, Debug 13/13 PASS and Release 13/13 PASS (core blob add89eac106d0d2c9835d62a8d04d98769b799c3; test blob bb81c70bcd730a174086c818aa1a44fa39120695). Covers transition timing, cap arbitration and immediate Mock emergency stop. UIKit/Combine, actual iOS hardware and UI remain NOT RUN.
+
+## Native CI #1 — a57c7d9
+- Run 45945349489: Xcode environment, Debug/Release device builds and simulator selection PASS.
+- Debug native XCTest: 13/13 PASS. XCUITest: 3/4 PASS; emergency persistence test failed to tap emergencyStop after the quick panel auto-hid (accessibility hierarchy contained lampSurface only). Release tests and IPA skipped, not PASS.
+- Revised XCUITest to enter settings through the existing long-press gesture before interacting, preserving the production 5-second hide timer. Explicitly closes settings before testing auto-hide. Retry pending.

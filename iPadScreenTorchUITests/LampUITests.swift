@@ -9,9 +9,23 @@ final class LampUITests: XCTestCase {
         return app
     }
 
+    private func surfacePoint(_ app: XCUIApplication) -> XCUICoordinate {
+        app.buttons["lampSurface"].coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.9))
+    }
+
+    private func openSettings(_ app: XCUIApplication) {
+        let back = app.buttons["backSettings"]
+        if !back.exists {
+            // Use the real long-press gesture, even if the quick panel already timed out.
+            surfacePoint(app).press(forDuration: 1.0)
+        }
+        XCTAssertTrue(back.waitForExistence(timeout: 5))
+    }
+
     func testLaunchAndControls() {
         let app = launch()
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
+        openSettings(app)
         XCTAssertTrue(app.buttons["toggleLamp"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.sliders["brightnessSlider"].exists)
         XCTAssertTrue(app.sliders["kelvinSlider"].exists)
@@ -19,6 +33,7 @@ final class LampUITests: XCTestCase {
 
     func testEmergencyBlocksToggleAcrossRelaunch() {
         let app = launch()
+        openSettings(app)
         let emergency = app.buttons["emergencyStop"]
         XCTAssertTrue(emergency.waitForExistence(timeout: 3))
         emergency.tap()
@@ -32,13 +47,14 @@ final class LampUITests: XCTestCase {
 
     func testPanelAutoHideAndTap() {
         let app = launch()
+        openSettings(app)
         let toggle = app.buttons["toggleLamp"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 3))
         let initial = toggle.label
+        app.buttons["backSettings"].tap()
         let hidden = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: toggle)
         XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 8), .completed)
-        let surface = app.descendants(matching: .any).matching(identifier: "lampSurface").firstMatch
-        let point = surface.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.9))
+        let point = surfacePoint(app)
         point.doubleTap()
         point.tap()
         XCTAssertTrue(toggle.waitForExistence(timeout: 3))
@@ -47,9 +63,7 @@ final class LampUITests: XCTestCase {
 
     func testSettingsRemainVisible() {
         let app = launch()
-        let settings = app.buttons["settingsButton"]
-        XCTAssertTrue(settings.waitForExistence(timeout: 3))
-        settings.tap()
+        openSettings(app)
         let back = app.buttons["backSettings"]
         XCTAssertTrue(back.waitForExistence(timeout: 3))
         let hidden = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: back)
