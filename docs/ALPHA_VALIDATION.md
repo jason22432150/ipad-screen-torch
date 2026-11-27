@@ -39,7 +39,7 @@ Source: `77bd45621ddadd5ec2d4820a58eb5d6e29283b5e`, [CI #4](https://github.com/j
 
 | Device observation | Actual / result |
 |---|---|
-| Installation method, iPadOS 15.8.3 / iPad Air 2 | BLOCKED |
+| Installation method, iPadOS 15.8.3 / iPad Air 2 | AltStore Classic selected by user; installation BLOCKED pending physical operation |
 | Launch, flight mode, screen color and four directions | NOT RUN |
 | Brightness steps, gestures, panel timeout, setting persistence | NOT RUN |
 | Emergency stop, latch after relaunch, explicit recovery | NOT RUN |

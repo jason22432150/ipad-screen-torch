@@ -38,3 +38,6 @@
 - [Unsigned IPA artifact](https://github.com/jason22432150/ipad-screen-torch/actions/runs/45956631549/artifacts/15179229182) and [test evidence](https://github.com/jason22432150/ipad-screen-torch/actions/runs/45956631549/artifacts/15179742163); expiry 2026-12-04 07:23 UTC.
 - M01–M05 Alpha implementation and current automated suites complete. Physical-device portions of M03–M05 remain unverified. M06 installation/safety acceptance BLOCKED until physical iPad Air 2 / iPadOS 15.8.3 and a suitable installation method are available. M07 release gate NOT PASSED; no release/tag or main merge. Do not deploy as a permanent lamp until device acceptance.
 - Subsequent documentation-only commit records this run without altering the tested source or retriggering the path-filtered CI. Artifact is associated with 77bd456, not the documentation commit.
+
+## Installation decision — 2026-11-27
+- User selected AltStore Classic for personal signing/install. Instructions recorded in INSTALLATION.md. CI #4 unsigned IPA remains the candidate; install and physical acceptance NOT RUN. No signing credentials collected, no source changes, no new CI trigger or release/tag.
