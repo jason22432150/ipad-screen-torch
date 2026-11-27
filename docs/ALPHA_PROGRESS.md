@@ -21,3 +21,11 @@
 - Run 45950420650: Debug and Release device builds PASS; native Debug core XCTest 13/13 PASS.
 - XCUITest 3/4 PASS. Emergency latch across relaunch now PASS. Auto-hide test failed at backSettings: element found, but AX could not compute a hit point (scroll-to-visible failed). Release tests and IPA skipped.
 - Corrective UI changes: explicit measured hosting height constrained to safe area, scrollable content, return action moved to header so it remains reachable; no deployment-target or hide-time changes. XCUITest now asserts that Back is hittable and actually closes settings. Native regression pending.
+
+## Native CI #3 — 5e98c5a (2026-11-27)
+- [Run 45952311447](https://github.com/jason22432150/ipad-screen-torch/actions/runs/45952311447): SUCCESS. Xcode 16.4 (16F6), iPhoneOS SDK 18.5; runner log selected iPad mini (A17 Pro), simulator runtime 26.2.
+- Debug and Release device builds PASS. Each configuration: 13/13 native XCTest and 4/4 XCUITest PASS; 34 test executions total, zero failures.
+- IPA structure, iPad device family, arm64, bundle ID, Mach-O platform IOS and minimum OS 15.0 verified by CI. SIGNING=UNSIGNED. No device install.
+- IPA SHA-256: `0603fb5068c88114e4d6a592399edd411a6a06ce147780f905677f77a609b1ff`.
+- [Unsigned IPA artifact](https://github.com/jason22432150/ipad-screen-torch/actions/runs/45952311447/artifacts/15177358369) and [test evidence](https://github.com/jason22432150/ipad-screen-torch/actions/runs/45952311447/artifacts/15177652685) expire 2026-12-04 UTC.
+- Additional directional pan and orientation UI tests authored after run #3; pending native regression. Actual iPad Air 2 / iPadOS 15.8.3 checks remain BLOCKED; do not mark release gate passed.

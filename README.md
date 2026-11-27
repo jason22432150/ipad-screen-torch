@@ -2,7 +2,7 @@
 
 將閒置 iPad Air 2 改造成全螢幕智慧檯燈。目標實機：iPadOS 15.8.3；最低 iOS 15.0；arm64；完全離線；不需 Jailbreak。個人 IPA 安裝為主，不規劃 App Store 或 TestFlight。
 
-**狀態：v0.1.0 Alpha 開發中；尚未放行。** 可攜式 Swift 核心測試已執行；所有 iOS 原生與實機測試仍待執行。詳見 [Alpha 進度](docs/ALPHA_PROGRESS.md) 與 [驗收清單](docs/ALPHA_VALIDATION.md)。
+**狀態：v0.1.0 Alpha 開發中；尚未放行。** CI #3 原生 Debug/Release 編譯、各 17 項測試及未簽署 IPA 驗證通過；追加滑動/方向測試待 CI，iPad Air 2 實機仍待驗收。詳見 [Alpha 進度](docs/ALPHA_PROGRESS.md) 與 [驗收清單](docs/ALPHA_VALIDATION.md)。
 
 ## 開發入口
 先閱讀 [AGENTS.md](AGENTS.md) 與 [產品規格](docs/PRODUCT_SPEC.md)，依 [開發路線](docs/ROADMAP.md) 從 v0.1.0 開始。其他文件：
@@ -22,4 +22,4 @@
 | [TESTING](docs/TESTING.md) | 方案 B 驗收矩陣 |
 | [ROADMAP](docs/ROADMAP.md) | 里程碑、實作順序 |
 
-不應將本 App 視為經校準的光源或硬體安全控制器；老舊電池應先檢查。尚無 IPA 可下載。
+不應將本 App 視為經校準的光源或硬體安全控制器；老舊電池應先檢查。[CI #3 未簽署 IPA](https://github.com/jason22432150/ipad-screen-torch/actions/runs/45952311447/artifacts/15177358369) 可供個人簽署與驗收（尚未放行，Artifact 有效期至 2026-12-04 UTC）。
