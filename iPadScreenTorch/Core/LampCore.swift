@@ -182,7 +182,7 @@ enum LampReducer {
     var brightness: Double { get }
     func write(_ brightness: Double)
 }
-@MainActor protocol IdleTimerService { var disabled: Bool { get set } }
+@MainActor protocol IdleTimerService: AnyObject { var disabled: Bool { get set } }
 
 #if canImport(Combine)
 @MainActor final class LampStore: ObservableObject {
@@ -195,3 +195,70 @@ enum LampReducer {
     }
 }
 #endif
+
+struct BrightnessOutput: Equatable {
+    let hardware: Double
+    let software: Double
+    static func map(_ effective: Int) -> Self {
+        let e = min(100, max(0, effective))
+        if e == 0 { return Self(hardware: 0, software: 0) }
+        if e < 5 { return Self(hardware: 0.05, software: Double(e) / 5) }
+        return Self(hardware: Double(e) / 100, software: 1)
+    }
+}
+
+struct LampRGB: Equatable {
+    let red: Double
+    let green: Double
+    let blue: Double
+    static func kelvin(_ value: Int) -> Self {
+        let t = Double(min(10000, max(1000, value))) / 100
+        let r = t <= 66 ? 255 : 329.698727446 * pow(t - 60, -0.1332047592)
+        let g = t <= 66 ? 99.4708025861 * log(t) - 161.1195681661 : 288.1221695283 * pow(t - 60, -0.0755148492)
+        let b = t >= 66 ? 255 : (t <= 19 ? 0 : 138.5177312231 * log(t - 10) - 305.0447927307)
+        func normalize(_ v: Double) -> Double { min(255, max(0, v)) / 255 }
+        return Self(red: normalize(r), green: normalize(g), blue: normalize(b))
+    }
+    func scaled(_ value: Double) -> Self {
+        let factor = value.isFinite ? min(1, max(0, value)) : 0
+        return Self(red: red * factor, green: green * factor, blue: blue * factor)
+    }
+}
+
+@MainActor final class ScreenOwnership {
+    private let screen: ScreenBrightnessService
+    private let idle: IdleTimerService
+    private var snapshot: (brightness: Double, idle: Bool)?
+    private var lastWrite: (value: Double, time: TimeInterval)?
+    init(screen: ScreenBrightnessService, idle: IdleTimerService) {
+        self.screen = screen
+        self.idle = idle
+    }
+    func acquire() {
+        guard snapshot == nil else { return }
+        snapshot = (screen.brightness, idle.disabled)
+        lastWrite = nil
+    }
+    func release() {
+        guard let original = snapshot else { return }
+        snapshot = nil
+        lastWrite = nil
+        idle.disabled = original.idle
+        if original.brightness.isFinite { screen.write(min(1, max(0, original.brightness))) }
+    }
+    func apply(_ state: LampState, now: TimeInterval) {
+        guard state.active, let original = snapshot else { return }
+        let output = BrightnessOutput.map(state.effective)
+        idle.disabled = state.phase == .lighting || state.phase == .standby ? true : original.idle
+        if !screen.brightness.isFinite || abs(screen.brightness - output.hardware) > 0.0005 {
+            lastWrite = (output.hardware, now)
+            screen.write(output.hardware)
+        }
+    }
+    func externalBrightness(_ value: Double, now: TimeInterval) -> Int? {
+        guard snapshot != nil, value.isFinite, (0...1).contains(value), now.isFinite else { return nil }
+        if let write = lastWrite, now >= write.time, now - write.time <= 0.5, abs(value - write.value) <= 0.0005 { return nil }
+        lastWrite = nil
+        return Int((value * 100).rounded())
+    }
+}

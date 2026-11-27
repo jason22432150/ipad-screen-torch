@@ -81,3 +81,55 @@ final class LampCoreTests: XCTestCase {
     func write(_ brightness: Double) { self.brightness = brightness; writes.append(brightness) }
 }
 @MainActor final class FakeIdleTimer: IdleTimerService { var disabled = false }
+
+extension LampCoreTests {
+    func testBrightnessMappingAndMonotonicity() {
+        for (e, h, s) in [(0,0.0,0.0),(1,0.05,0.2),(3,0.05,0.6),(4,0.05,0.8),(5,0.05,1.0),(6,0.06,1.0),(50,0.5,1.0),(100,1.0,1.0)] {
+            XCTAssertEqual(BrightnessOutput.map(e), BrightnessOutput(hardware: h, software: s))
+        }
+        for e in 1...100 {
+            let a = BrightnessOutput.map(e - 1), b = BrightnessOutput.map(e)
+            XCTAssertLessThanOrEqual(a.hardware * a.software, b.hardware * b.software)
+        }
+        XCTAssertEqual(BrightnessOutput.map(Int.min), BrightnessOutput.map(0))
+        XCTAssertEqual(BrightnessOutput.map(Int.max), BrightnessOutput.map(100))
+    }
+    func testKelvinBoundsAndDarkOutput() {
+        let warm = LampRGB.kelvin(1000), cool = LampRGB.kelvin(10000)
+        XCTAssertEqual(warm, LampRGB.kelvin(Int.min))
+        XCTAssertEqual(cool, LampRGB.kelvin(Int.max))
+        XCTAssertGreaterThan(warm.red, warm.blue)
+        XCTAssertGreaterThan(cool.blue, cool.red)
+        for k in stride(from: 1000, through: 10000, by: 100) {
+            let color = LampRGB.kelvin(k)
+            for c in [color.red, color.green, color.blue] { XCTAssertTrue((0...1).contains(c)) }
+            XCTAssertEqual(color.scaled(0), LampRGB(red: 0, green: 0, blue: 0))
+            XCTAssertEqual(color.scaled(.nan), LampRGB(red: 0, green: 0, blue: 0))
+        }
+    }
+    func testOwnershipRestoresAndRejectsOwnNotification() async {
+        await MainActor.run {
+            let screen = FakeScreen(), idle = FakeIdleTimer()
+            let owner = ScreenOwnership(screen: screen, idle: idle)
+            var s = LampState()
+            owner.acquire()
+            LampReducer.reduce(&s, .activate(.nominal, BatteryReading(level: 0.9, power: .charging), 0))
+            LampReducer.reduce(&s, .toggle)
+            owner.apply(s, now: 1)
+            XCTAssertEqual(screen.brightness, 0.8)
+            XCTAssertTrue(idle.disabled)
+            XCTAssertNil(owner.externalBrightness(0.8, now: 1.1))
+            XCTAssertEqual(owner.externalBrightness(0.5, now: 2), 50)
+            LampReducer.reduce(&s, .emergencyStop)
+            owner.apply(s, now: 3)
+            XCTAssertEqual(screen.brightness, 0)
+            XCTAssertFalse(idle.disabled)
+            LampReducer.reduce(&s, .deactivate)
+            owner.release()
+            XCTAssertEqual(screen.brightness, 0.5)
+            XCTAssertNil(owner.externalBrightness(0.9, now: 4))
+            owner.apply(s, now: 4)
+            XCTAssertEqual(screen.brightness, 0.5)
+        }
+    }
+}
