@@ -133,3 +133,57 @@ extension LampCoreTests {
         }
     }
 }
+
+extension LampCoreTests {
+    func testRuntimeRestorationAndSuspectLaunch() {
+        var source = LampState()
+        LampReducer.reduce(&source, .activate(.nominal, ac, 0))
+        LampReducer.reduce(&source, .toggle)
+        LampReducer.reduce(&source, .setBrightness(3))
+        let clean = RuntimeSnapshot(state: source, active: false)
+        var restored = LampState()
+        LampReducer.reduce(&restored, .restoreRuntime(clean))
+        LampReducer.reduce(&restored, .activate(.nominal, ac, 0))
+        XCTAssertEqual(restored.effective, 3)
+        var suspect = LampState()
+        LampReducer.reduce(&suspect, .restoreRuntime(RuntimeSnapshot(state: source, active: true)))
+        LampReducer.reduce(&suspect, .activate(.nominal, ac, 0))
+        XCTAssertEqual(suspect.effective, 0)
+        XCTAssertEqual(suspect.requested, 3)
+        LampReducer.reduce(&source, .emergencyStop)
+        var latched = LampState()
+        LampReducer.reduce(&latched, .restoreRuntime(RuntimeSnapshot(state: source, active: false)))
+        LampReducer.reduce(&latched, .activate(.nominal, ac, 0))
+        XCTAssertEqual(latched.phase, .safetyShutdown)
+        XCTAssertTrue(latched.safety.latch.contains(.emergency))
+    }
+    func testPersistenceFailureBlocksLighting() {
+        var s = LampState()
+        LampReducer.reduce(&s, .activate(.nominal, ac, 0))
+        LampReducer.reduce(&s, .toggle)
+        LampReducer.reduce(&s, .storageFailure)
+        LampReducer.reduce(&s, .toggle)
+        LampReducer.reduce(&s, .confirmSafety(120))
+        XCTAssertEqual(s.effective, 0)
+        XCTAssertEqual(s.phase, .safetyShutdown)
+        XCTAssertTrue(s.storageBlocked)
+    }
+    func testAtomicRuntimeRoundtripAndFutureSchema() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("runtime-state.json")
+        let persistence = RuntimePersistence(url: url)
+        if case .missing = persistence.load() {} else { XCTFail("Expected missing") }
+        let snapshot = RuntimeSnapshot(state: LampState(), active: true)
+        try persistence.save(snapshot)
+        if case let .valid(value) = persistence.load() { XCTAssertEqual(value, snapshot) } else { XCTFail("Expected valid") }
+        let future = Data("{\"schemaVersion\":2}".utf8)
+        try future.write(to: url)
+        XCTAssertThrowsError(try persistence.save(snapshot))
+        XCTAssertEqual(try Data(contentsOf: url), future)
+        try Data("broken".utf8).write(to: url)
+        if case .invalid = persistence.load() {} else { XCTFail("Expected invalid") }
+        try persistence.save(snapshot)
+        XCTAssertEqual(try Data(contentsOf: url.appendingPathExtension("invalid")), Data("broken".utf8))
+    }
+}

@@ -110,15 +110,18 @@ struct LampState {
     var safety = SafetyState()
     var active = false
     var launched = false
+    var storageBlocked = false
+
+    var isBlocked: Bool { storageBlocked || !safety.latch.isEmpty }
 
     var effective: Int {
-        guard active, wantsLight, safety.latch.isEmpty else { return 0 }
+        guard active, wantsLight, !isBlocked else { return 0 }
         return min(requested, safety.thermalCap, safety.battery.cap)
     }
     var phase: LampPhase {
         if !launched { return .initializing }
         if !active { return .suspended }
-        if !safety.latch.isEmpty { return .safetyShutdown }
+        if isBlocked { return .safetyShutdown }
         if wantsLight { return .lighting }
         return safety.battery.power == .charging || safety.battery.power == .full ? .standby : .sleepEligible
     }
@@ -134,6 +137,8 @@ enum LampAction {
     case emergencyStop
     case restoreLatch(Set<StopReason>)
     case confirmSafety(TimeInterval)
+    case restoreRuntime(RuntimeSnapshot)
+    case storageFailure
 }
 
 enum LampReducer {
@@ -149,18 +154,18 @@ enum LampReducer {
             guard state.active else { return }
             state.safety.observe(heat: heat, battery: battery, now: now)
         case .toggle:
-            guard state.active, state.safety.latch.isEmpty else { return }
+            guard state.active, !state.isBlocked else { return }
             state.wantsLight.toggle()
             if state.wantsLight { state.requested = state.lastNonZero }
         case let .setBrightness(value):
-            guard state.active, state.safety.latch.isEmpty else { return }
+            guard state.active, !state.isBlocked else { return }
             if value <= 0 { state.wantsLight = false }
             else {
                 state.requested = min(100, value)
                 state.lastNonZero = state.requested
             }
         case let .setKelvin(value):
-            guard state.active, state.safety.latch.isEmpty else { return }
+            guard state.active, !state.isBlocked else { return }
             let clamped = min(10000, max(1000, value))
             state.kelvin = ((clamped + 50) / 100) * 100
         case .emergencyStop:
@@ -168,10 +173,19 @@ enum LampReducer {
         case let .restoreLatch(reasons):
             state.safety.restoreLatch(reasons)
         case let .confirmSafety(now):
-            guard state.active, state.safety.confirm(now: now) else { return }
+            guard state.active, !state.storageBlocked, state.safety.confirm(now: now) else { return }
             state.wantsLight = false
+        case let .restoreRuntime(snapshot):
+            guard !state.launched, snapshot.isValid else { return }
+            state.requested = snapshot.requested
+            state.lastNonZero = snapshot.lastNonZero
+            state.kelvin = snapshot.kelvin
+            state.safety.restoreLatch(snapshot.safetyLatch)
+            state.wantsLight = !snapshot.foregroundRunMarker && snapshot.desiredPower
+        case .storageFailure:
+            state.storageBlocked = true
         }
-        if !state.safety.latch.isEmpty { state.wantsLight = false }
+        if state.isBlocked { state.wantsLight = false }
     }
 }
 
@@ -246,11 +260,11 @@ struct LampRGB: Equatable {
         idle.disabled = original.idle
         if original.brightness.isFinite { screen.write(min(1, max(0, original.brightness))) }
     }
-    func apply(_ state: LampState, now: TimeInterval) {
+    func apply(_ state: LampState, now: TimeInterval, allowBrightnessWrite: Bool = true) {
         guard state.active, let original = snapshot else { return }
         let output = BrightnessOutput.map(state.effective)
         idle.disabled = state.phase == .lighting || state.phase == .standby ? true : original.idle
-        if !screen.brightness.isFinite || abs(screen.brightness - output.hardware) > 0.0005 {
+        if allowBrightnessWrite && (!screen.brightness.isFinite || abs(screen.brightness - output.hardware) > 0.0005) {
             lastWrite = (output.hardware, now)
             screen.write(output.hardware)
         }
@@ -260,5 +274,73 @@ struct LampRGB: Equatable {
         if let write = lastWrite, now >= write.time, now - write.time <= 0.5, abs(value - write.value) <= 0.0005 { return nil }
         lastWrite = nil
         return Int((value * 100).rounded())
+    }
+}
+
+struct RuntimeSnapshot: Codable, Equatable {
+    var schemaVersion = 1
+    var requested: Int
+    var lastNonZero: Int
+    var kelvin: Int
+    var desiredPower: Bool
+    var safetyLatch: Set<StopReason>
+    var foregroundRunMarker: Bool
+    var isValid: Bool {
+        schemaVersion == 1 && (1...100).contains(requested) && (1...100).contains(lastNonZero) &&
+            (1000...10000).contains(kelvin) && kelvin % 100 == 0
+    }
+    init(state: LampState, active: Bool) {
+        requested = state.requested
+        lastNonZero = state.lastNonZero
+        kelvin = state.kelvin
+        desiredPower = state.wantsLight && !state.isBlocked
+        safetyLatch = state.safety.latch
+        foregroundRunMarker = active
+    }
+}
+
+enum RuntimeLoad {
+    case missing, valid(RuntimeSnapshot), invalid
+}
+
+enum RuntimePersistenceError: Error { case invalidSnapshot, futureSchema, oversized }
+
+final class RuntimePersistence {
+    private let url: URL
+    private let queue = DispatchQueue(label: "ScreenTorch.runtimePersistence")
+    private let maxBytes = 5 * 1024 * 1024
+    init(url: URL) { self.url = url }
+    func load() -> RuntimeLoad {
+        queue.sync {
+            guard FileManager.default.fileExists(atPath: url.path) else { return .missing }
+            do {
+                let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+                guard let size = attributes[.size] as? NSNumber, size.intValue <= maxBytes else { return .invalid }
+                let data = try Data(contentsOf: url)
+                guard data.count <= maxBytes else { return .invalid }
+                let snapshot = try JSONDecoder().decode(RuntimeSnapshot.self, from: data)
+                return snapshot.isValid ? .valid(snapshot) : .invalid
+            } catch { return .invalid }
+        }
+    }
+    func save(_ snapshot: RuntimeSnapshot) throws {
+        try queue.sync {
+            guard snapshot.isValid else { throw RuntimePersistenceError.invalidSnapshot }
+            let manager = FileManager.default
+            try manager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if manager.fileExists(atPath: url.path) {
+                let size = try manager.attributesOfItem(atPath: url.path)[.size] as? NSNumber
+                guard let size = size, size.intValue <= maxBytes else { throw RuntimePersistenceError.oversized }
+                let old = try Data(contentsOf: url)
+                if let raw = try? JSONSerialization.jsonObject(with: old) as? [String: Any],
+                   let version = raw["schemaVersion"] as? Int, version > 1 { throw RuntimePersistenceError.futureSchema }
+                if (try? JSONDecoder().decode(RuntimeSnapshot.self, from: old).isValid) != true {
+                    let quarantine = url.appendingPathExtension("invalid")
+                    if !manager.fileExists(atPath: quarantine.path) { try old.write(to: quarantine, options: .atomic) }
+                }
+            }
+            let data = try JSONEncoder().encode(snapshot)
+            try data.write(to: url, options: .atomic)
+        }
     }
 }
