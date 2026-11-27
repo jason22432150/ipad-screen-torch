@@ -21,7 +21,7 @@ check-env.sh 檢查 Xcode/SDK/toolchain；build.sh Debug/Release；test.sh 單�
 
 ## 已選定 AltStore Classic — 2026-11-27
 使用者選擇 D（AltStore），不改變個人安裝 B 或離線產品規格。使用 [AltStore 官方網站](https://altstore.io/) 與 [macOS 安裝指引](https://faq.altstore.io/altstore-classic/how-to-install-altstore-macos)。目標 iPad Air 2 / iPadOS 15.8.3，實際工具版本及簽署成功仍需實機確認。
-1. 先備份 iPad，確認老舊電池沒有異常。從 CI #4 下載 [unsigned IPA artifact](https://github.com/jason22432150/ipad-screen-torch/actions/runs/45956631549/artifacts/15179229182)，解壓外層 ZIP，保留 IPA 完整。
+1. 先備份 iPad，確認老舊電池沒有異常。從 CI #5 下載 [Build 2 unsigned IPA artifact](https://github.com/jason22432150/ipad-screen-torch/actions/runs/46010888245/artifacts/15205980406)，解壓外層 ZIP，保留 IPA 完整。Build 2 含 App Icon；SHA-256：6c0e5d2309e7309b23e45f43204a1dfb692486a7e5a3177a8412b519e9cdf6cc。Artifact 有效期至 2026-12-04 14:12 UTC。
 2. Mac 安裝 AltServer，USB 連線並信任 iPad；Finder 啟用 Wi-Fi 同步，AltServer 選 Install AltStore。若已有可用 AltStore 則跳過。Apple ID 資料只在本機工具輸入，不提供給專案或聊天。
 3. iPad 設定 > 一般 > VPN 與裝置管理，信任個人開發者（依系統介面文字）；iPadOS 15 不需要 iOS 16 的 Developer Mode。
 4. 將 IPA 儲存至 iPad 檔案 App；AltStore My Apps > +，選擇 IPA，保持 AltServer 可連線，安裝完成後開啟 Screen Torch。不要解除現有裝置安全保護；遇到錯誤保留錯誤碼及去識別畫面。

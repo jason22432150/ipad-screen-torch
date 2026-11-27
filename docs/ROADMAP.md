@@ -13,7 +13,7 @@
 
 ## 第一批實作工作（依序）
 
-勾選表示 Alpha 程式碼及當前自動化測試完成，不表示 iPad Air 2 實機驗收通過。[CI #4](https://github.com/jason22432150/ipad-screen-torch/actions/runs/45956631549)：Debug/Release 各 19/19；[實機驗收紀錄](ALPHA_VALIDATION.md) 仍待執行。
+勾選表示 Alpha 程式碼及當前自動化測試完成，不表示 iPad Air 2 實機驗收通過。[CI #5](https://github.com/jason22432150/ipad-screen-torch/actions/runs/46010888245)：Debug/Release 各 19/19；[實機驗收紀錄](ALPHA_VALIDATION.md) 仍待執行。
 - [x] M01 Xcode iPad project、scheme、最低 iOS15、Swift5，零依賴；本機檢查/build/test 腳本。
 - [x] M02 Core models、protocols、Store/reducer、fake clock/battery/thermal/screen；安全 cap 與 latch。
 - [x] M03 brightness + color 純函式與 XCTest；硬體 ownership、idle timer、生命週期恢復。

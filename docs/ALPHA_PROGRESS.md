@@ -44,3 +44,9 @@
 
 ## App Icon / Build 2
 - User requested a packaged icon. Added opaque RGB PNGs in explicit iPad sizes (20/29/40/58/76/80/152/167/1024 pixels), warm illuminated tablet artwork, AppIcon asset catalog and target resources. Raised CFBundleVersion to 2; bundle identifier and minimum iOS unchanged. Added IPA icon gate (primary icon metadata, PNG and Assets.car), and derived build metadata from built Info.plist. CI and physical acceptance pending. Build 1 remains historical, not the new icon candidate.
+
+## Native CI #5 — 1b612cbd89ed51515098d56638349821704c2d38 (2026-11-27)
+- [Run 46010888245](https://github.com/jason22432150/ipad-screen-torch/actions/runs/46010888245): SUCCESS. Xcode 16.4 (16F6), simulator selected iPad mini (A17 Pro), reported runtime 26.2. Debug and Release device builds PASS.
+- Debug and Release each 13/13 XCTest and 6/6 XCUITest PASS (38 executions total, zero failures). Primary iPad icon metadata, packaged PNG and Assets.car validated by verify-ipa.sh; arm64/minOS 15.0 and unsigned IPA structure PASS. Home-screen rendering after AltStore installation is NOT RUN.
+- Build 2 candidate: [IPA](https://github.com/jason22432150/ipad-screen-torch/actions/runs/46010888245/artifacts/15205980406), [CI evidence](https://github.com/jason22432150/ipad-screen-torch/actions/runs/46010888245/artifacts/15204409698), expiry 2026-12-04 14:12 UTC. IPA SHA-256: `6c0e5d2309e7309b23e45f43204a1dfb692486a7e5a3177a8412b519e9cdf6cc` (not the outer artifact ZIP hash).
+- Build 2 supersedes Build 1 for physical acceptance. No App code changes in subsequent documentation-only commit. M06 physical gate BLOCKED; M07 not released. No additional CI trigger or merge to main.
