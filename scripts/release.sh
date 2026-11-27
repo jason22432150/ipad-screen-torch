@@ -10,11 +10,13 @@ scripts/package-ipa.sh build/device-Release/Build/Products/Release-iphoneos/iPad
 scripts/verify-ipa.sh "$ipa" | tee build/release/verify-ipa.txt
 (cd build/release && shasum -a 256 iPadScreenTorch-0.1.0-unsigned.ipa > SHA256SUMS.txt)
 python3 - "$(git rev-parse HEAD)" "$(xcodebuild -version)" "$(xcrun --sdk iphoneos --show-sdk-version)" <<'PY'
-import json, pathlib, sys
+import json, pathlib, plistlib, sys
 commit, xcode, sdk = sys.argv[1:]
 path = pathlib.Path('build/release/verify-ipa.txt')
 signing = next((line.split('=', 1)[1] for line in path.read_text().splitlines() if line.startswith('SIGNING=')), 'UNKNOWN')
-info = {'commit': commit, 'xcode': xcode, 'sdk': sdk, 'minimumOS': '15.0', 'version': '0.1.0', 'build': '1', 'signing': signing, 'deviceTest': 'NOT RUN', 'releaseGate': 'NOT PASSED'}
+with open('build/device-Release/Build/Products/Release-iphoneos/iPadScreenTorch.app/Info.plist', 'rb') as f:
+    bundle = plistlib.load(f)
+info = {'commit': commit, 'xcode': xcode, 'sdk': sdk, 'minimumOS': bundle['MinimumOSVersion'], 'version': bundle['CFBundleShortVersionString'], 'build': bundle['CFBundleVersion'], 'signing': signing, 'deviceTest': 'NOT RUN', 'releaseGate': 'NOT PASSED'}
 pathlib.Path('build/release/build-info.json').write_text(json.dumps(info, indent=2) + '\n')
 PY
 echo 'Local unsigned artifact only. No GitHub Release created; device and native test gates remain separate.'

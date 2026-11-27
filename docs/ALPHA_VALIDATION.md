@@ -47,3 +47,6 @@ Source: `77bd45621ddadd5ec2d4820a58eb5d6e29283b5e`, [CI #4](https://github.com/j
 | Unexpected behavior / sanitized screenshot or log | NOT RUN |
 
 No intentional overheat or deep discharge. Automatic tests cannot prove old-device compatibility, real backlight or battery safety. Any swelling, unusual heat or screen lifting: stop and have the battery inspected. Alpha release approval remains blocked until applicable device observations are recorded and failures resolved.
+
+## Build 2 icon verification (pending)
+New App Icon requested by user; run CI to verify icon metadata, compiled assets and packaged PNG. Install the new signed Build 2 through AltStore and confirm Screen Torch home-screen icon and launch. Build 1 checks above remain historical; Build 2 physical acceptance NOT RUN.

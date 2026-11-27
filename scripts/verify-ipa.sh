@@ -36,6 +36,15 @@ if info.get('CFBundleSupportedPlatforms') != ['iPhoneOS']:
     raise SystemExit('Not an iPhoneOS device build')
 if not (app / info['CFBundleExecutable']).is_file():
     raise SystemExit('Executable missing')
+icons = info.get('CFBundleIcons~ipad', info.get('CFBundleIcons', {})).get('CFBundlePrimaryIcon', {})
+icon_files = icons.get('CFBundleIconFiles', [])
+if not icons or not icon_files:
+    raise SystemExit('Missing primary iPad App Icon metadata')
+if not (app / 'Assets.car').is_file():
+    raise SystemExit('Missing compiled asset catalog')
+if not any(any(app.glob(name + '*.png')) for name in icon_files):
+    raise SystemExit('Missing packaged primary icon PNG')
+print('PASS: primary iPad App Icon metadata, PNG and Assets.car')
 print('PASS: IPA structure, bundle ID, minimum OS and iPad device family')
 PY
 app="$tmp/Payload/iPadScreenTorch.app"

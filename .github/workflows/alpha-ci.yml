@@ -78,12 +78,14 @@ jobs:
           scripts/verify-ipa.sh build/ci/ipa/iPadScreenTorch-0.1.0-unsigned.ipa | tee build/ci/ipa/verify-ipa.txt
           (cd build/ci/ipa && shasum -a 256 *.ipa > SHA256SUMS.txt)
           python3 - <<'PY'
-          import json, os, pathlib, subprocess
+          import json, os, pathlib, plistlib, subprocess
+          with open("build/device-Release/Build/Products/Release-iphoneos/iPadScreenTorch.app/Info.plist", "rb") as f:
+              bundle = plistlib.load(f)
           info = {
               "commit": os.environ["GITHUB_SHA"],
               "xcode": subprocess.check_output(["xcodebuild", "-version"], text=True).strip(),
               "sdk": subprocess.check_output(["xcrun", "--sdk", "iphoneos", "--show-sdk-version"], text=True).strip(),
-              "minimumOS": "15.0", "version": "0.1.0", "build": "1",
+              "minimumOS": bundle["MinimumOSVersion"], "version": bundle["CFBundleShortVersionString"], "build": bundle["CFBundleVersion"],
               "deviceTest": "NOT RUN", "releaseGate": "NOT PASSED"
           }
           log = pathlib.Path("build/ci/ipa/verify-ipa.txt").read_text()

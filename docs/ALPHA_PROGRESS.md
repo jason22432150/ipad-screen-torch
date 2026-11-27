@@ -41,3 +41,6 @@
 
 ## Installation decision — 2026-11-27
 - User selected AltStore Classic for personal signing/install. Instructions recorded in INSTALLATION.md. CI #4 unsigned IPA remains the candidate; install and physical acceptance NOT RUN. No signing credentials collected, no source changes, no new CI trigger or release/tag.
+
+## App Icon / Build 2
+- User requested a packaged icon. Added opaque RGB PNGs in explicit iPad sizes (20/29/40/58/76/80/152/167/1024 pixels), warm illuminated tablet artwork, AppIcon asset catalog and target resources. Raised CFBundleVersion to 2; bundle identifier and minimum iOS unchanged. Added IPA icon gate (primary icon metadata, PNG and Assets.car), and derived build metadata from built Info.plist. CI and physical acceptance pending. Build 1 remains historical, not the new icon candidate.
